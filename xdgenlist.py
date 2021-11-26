@@ -51,8 +51,11 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
 
     # Extract list of significant source detections as "mb"
     #mb = mres[mres['flux'] > limitup and ( mres['mjd'] > 56250 or mres['flux'] < 1e4)]
-    ma1 = mres[mres['mjd'] <=  56250]
-    ma2 = mres[mres['mjd'] > 56260]
+
+    datcrit = 56250
+
+    ma1 = mres[mres['mjd'] <=  datcrit]
+    ma2 = mres[mres['mjd'] > datcrit]
     ma1 = ma1[ma1['flux'] > limitup]
     ma1 = ma1[ma1['flux'] < 500]   ## controlling for spurrious results early on; faint enough to trigger to be on the list are still allowed... just not allowed to be permanent & high
     ma2 = ma2[ma2['flux'] > limitup]
@@ -130,7 +133,7 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
                     obj='1'+obj
                 if obj[0:2]=='X_':
                     obj=('foo'+obj).replace('fooX_','3A_')                       
-            pageworks = mr.test_simbad_page(obj,mirror=mirror)
+                pageworks = mr.test_simbad_page(obj,mirror=mirror)
     
         # In case no results found, put in placeholding indefinite coords
         if obj == '404_Not_Found':
@@ -313,8 +316,8 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
     #for q in ss_:
     #    cnt = sum(1 for i in sbids if i==q)
     #    if cnt < 2:   
-    #        ss_ = [j for j in ss_ if j != q]   # now should only have elements with multiple detections                                                                          
-
+    #        ss_ = [j for j in ss_ if j != q]   # now should only have elements with multiple detections
+    
         
 
     # For each unique BAT source, get attributes of entry
@@ -460,7 +463,7 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
  
     for nom in ss_:
         loc=np.where(ab['asmID'] == nom)
-                                                                                                                                                                                     
+        
         name=str(nom).replace("b'","").replace("'",'')
         obj=name
         obj0=name
@@ -500,7 +503,7 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
 
         # ASM data should all be old, but no reason not to check in case of overlap with BAT or historical entries pending updates
         recentdate = ares['mjd'][loc2][-1]
-        if (np.float(today)-np.float(recentdate)) > RecentTimeLimit:    #no detections in last year...                                                                                           
+        if (np.float(today)-np.float(recentdate)) > RecentTimeLimit:    #no detections in last year...
             activity=0
             recentdate=-99
             recentflux=-9999
@@ -512,11 +515,13 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
             if _useful[kk]==1 and not _ra[kk][0]=='J':    # removes any duplicates and sources wiithout sharp coords
                 dang=mr.get_angsep_arcsec(_ra[kk],_dec[kk],ra,dec)   
                 if dang < angthreshold:
-                    # found a match in the existing master catalog...  update the match and do not add a new entry                                                                                                                                          
+                    # found a match in the existing master catalog...  update the match and do not add a new entry
+                    
                     newadd=0
                     print('...MATCHING ASM '+name+' to '+_objname[kk],dang)
                     if _fpeak[kk] < maxflux:  # check for new maximum
-                        # if new max, update the instrument, category, peak value, and peak date in the table                                                                                                               
+                        # if new max, update the instrument, category, peak value, and peak date in the table
+                        
                         _fpeak[kk] = maxflux
                         _ipeak[kk] = 'ASM'
                         _mjdpeak[kk] = maxdate
@@ -623,7 +628,8 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
             if _useful[kk]==1 and not _ra[kk][0]=='J':    # removes duplicate entries and any with bad coordinates
                 dang=mr.get_angsep_arcsec(_ra[kk],_dec[kk],ra,dec)
                 if dang < angthreshold:
-                    # found a match in the existing catalog... check and update the source fields, do not add a new entry                                                                                                         
+                    # found a match in the existing catalog... check and update the source fields, do not add a new entry
+
                     newadd=0
                     print('...MATCHING HISTORICAL-SOURCE '+name+' to '+_objname[kk],dang)
                     if _fpeak[kk] < maxflux:  # See if identified a new maximum
@@ -773,7 +779,76 @@ def gen_init_list(outfile='master_sourcelist.tab',reflist='historical_transients
 
 
 
+    
+## Update Sept-Oct 2021 - to include a FOT-centric CSV table as a standard daily output 
+def output_csvtab(reftab='master_sourcelist.tab',output=None,header=None,HumanDates=True):
+    import astropy.io.ascii as atab
+    from astropy.time import Time
+    import os
+    #    ascii.write(data, 'values.csv', format='csv', fast_writer=False)
 
+    tab=atab.read(reftab)
+    tab2 = tab[['Object','RA','DEC','Fpeak(Crab)','Frecent[MAXI]','MJDrecent[MAXI]','Frecent[BAT]','MJDrecent[BAT]','Activity']]  # only grabbing rows of interest
+    for el in tab2:
+        el['Object']=el['Object'].replace('_',' ').replace('xte','XTE')
+        el['Fpeak(Crab)']=np.round(el['Fpeak(Crab)'],3)
+        if el['MJDrecent[MAXI]'] < 0:
+            el['MJDrecent[MAXI]'] = -1.0
+            el['Frecent[MAXI]']   = -1.0
+        if el['Frecent[BAT]'] < 0:      # standardize
+            el['Frecent[BAT]'] = -1.0 
+
+
+    tab3=tab2[(tab2['Fpeak(Crab)'] > 0.9)]  # initially selecting entries only >~1Crab
+    tab4=tab3[tab3['Fpeak(Crab)'] > 5]   # the bright ones which are always for avoidance
+    tab4b=tab3[tab3['Activity'] == 1]    # anything active; have to remove matches from this 
+
+    for el in tab4b:   # any non- duplicate entries get appended to table 4, which will be used for output
+        mtch=np.where(tab4['Object']==el['Object'])[0]
+        if len(mtch)==0:
+            tab4.add_row(el)
+
+    if HumanDates is True:
+        tab5=tab4[['Object','RA','DEC','Fpeak(Crab)','Frecent[MAXI]']]  # initializing, but may change
+
+        dmaxi = Time(tab4['MJDrecent[MAXI]'],format='mjd').yday
+        dmaxi[tab4['MJDrecent[MAXI]'] < 0] = '-1.0'
+        dbat  = Time(tab4['MJDrecent[BAT]'],format='mjd').yday
+        dbat[tab4['MJDrecent[BAT]'] < 0] = '-1.0'
+
+        tab5['Drecent[MAXI]']=dmaxi
+        tab5['Frecent[BAT]']=tab4['Frecent[BAT]']
+        tab5['Drecent[BAT]']=dbat
+        tab5['Activity']=tab4['Activity']
+
+        # now truncate the dates at the hour, since these are so approximate # -- this has been removed to make the time formatting better compatible with standard software
+#        for el in tab5:
+#            if el['Drecent[MAXI]'][0:4] != '-1.0':
+#                el['Drecent[MAXI]']=el['Drecent[MAXI]'][0:11]
+#            if el['Drecent[BAT]'][0:4] != '-1.0':
+#                el['Drecent[BAT]']=el['Drecent[BAT]'][0:11]
+
+    else:
+        tab5=tab4
+
+
+    if header != None:   # make the header and output
+        fil=open('bs.head','w')
+        for zed in header:
+            fil.write(zed+'\n')
+        fil.close()
+        if output != None:
+            atab.write(tab5,output+'-tmp',format='csv') # output to a csv
+            os.system('cp bs.head '+output+'; sleep 0.1; cat '+output+'-tmp >> '+output+'; sleep 0.1; rm '+output+'-tmp')
+    else:
+        if output != None:
+            atab.write(tab5,output,format='csv')  #output to a csv
+        else:
+            atab.write(tab5,format='csv')  
+
+
+
+        
 # Simple routine to read in the master table and write out a "daily" file of sources to avoid based on the current sky
 def output_vtable(reftab='master_sourcelist.tab',output='None'):
     import astropy.io.ascii as atab

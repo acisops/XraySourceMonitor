@@ -360,8 +360,7 @@ def batread(infile):     # Reads in a BAT daily file
     import copy
 
     # Per-souce structure to hold in and pass along the table's data 
-    dtmplate = np.array([('-1',-1,0,'maxiname',0.,0.,'othernames go here',0.,0.)],dtype=[('dhuman','S12'),('mjd','f4'),('order','i4'),('batID','S20'),('flux','f4'),('err','f4'),('o\
-therID','S200'),('ra','f4'),('dec','f4')])
+    dtmplate = np.array([('-1',-1,0,'maxiname',0.,0.,'othernames go here',0.,0.)],dtype=[('dhuman','S12'),('mjd','f4'),('order','i4'),('batID','S20'),('flux','f4'),('err','f4'),('otherID','S200'),('ra','f4'),('dec','f4')])
 
     tab=atab.read(infile)  
     dtmplate['mjd']=str(infile).replace('BAT_record_','').replace('.dat','')  # update the default for the structure template
@@ -429,7 +428,7 @@ def maxiread(infile,maxnum=100):   # Reads in a MAXI daily file
     f = open(infile,'r')    # Read in line by line 
     lines=f.readlines()
 
-    cnd=False  # Initializing
+    cnd=False  # This Boolean condition flags having identified the start of the table with an entry ID of '001' having been matched
     i=2  # Skip first two header lines
 
     # Find the first data row
@@ -438,7 +437,7 @@ def maxiread(infile,maxnum=100):   # Reads in a MAXI daily file
         cnd=(lines[i][0:4]=='001 ') 
         if i > 30:   # Should not take this long to get there!!
             cnd=True # artificially impose a halt, something wrong 
-            _send_email_notice(type='BadMaxiTable',name=infile,sendto='JFS',message='Could no read in '+infile+'... check format for a glitch and see about fixing it.') 
+            _send_email_notice(type='BadMaxiTable',name=infile,sendto='JFS',message='Could not read in '+infile+'... check format for a glitch and see about fixing it.') 
             
     srclist=lines[i:min(len(lines)-3,i+maxnum)]   # read in up to maxnum lines
 
@@ -459,6 +458,7 @@ def maxiread(infile,maxnum=100):   # Reads in a MAXI daily file
         tres['maxiID']=_[1]
         tres['flux']=_[2]
         tres['err']=_[3]
+        tres['mjd']=_[4]   # edited in ... allows for the coverage pattern
 
         ttxt=''
         for k in _[5:]:   # Additional names stored at the end
