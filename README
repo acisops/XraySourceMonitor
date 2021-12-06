@@ -1,2 +1,27 @@
-To be updated... with some notes
+Version 0.2 Release Notes
+Dec. 2021
+--------------------------
+
+Transferred repository ownership to ACIS Operations, in order to bring into compliant software control.
+
+This release has several updated features:
+     - Flags are in place to switch SIMBAD repositories in case the CfA mirror goes down (which has happened twice in 2021)
+     - A new csv table is produced for FOT ingestion which includes very bright transients and any > Crab-bright active sources and is copied to an htdocs website
+       	     (https://cxc.cfa.harvard.edu/acis/fot_brightsource_list/bright_sources.csv)
+     - Several smaller updates including naming changes to the naming convention (static_xray.dat is now replaced with bright_xray.dat.)
+     - Email alerts for very bright targets are now disseminated to HRC as well as ACIS.
+     - Snapshots of the repository files are now copied at a slightly reduced cadence to save space over time.
+     - LR software has already been updated to make use of the new naming convention.
+
+
+Impact to ACIS of this release:
+     - Essentially none.  These are largely invisible changes, which are mostly to expand reach to other groups (HRC, FOT).  
+
+
+Outstanding Issues:
+     - A circumstance can arise where the daily bright-source uses 1-day old MAXI data rather than the latest.  This is a minor issue in terms of H&S or impact but is under investigation.
+
+
+
+
 
