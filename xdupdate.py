@@ -3,11 +3,11 @@ import numpy as np
 # Routine to send email alerts for common but notable occurences, like a new source popping...
 # Aim to make some more common cases like new maxima above (~Crab?) or similar
 def _send_email_notice(type='NEW',name='None',sendto='JFS',RA='None',DEC='None',home=False,message='None'):
-    import smtplib                                                                                                                                                               
-    from email.message import EmailMessage                                                                                                                                       
+    import smtplib
+    from email.message import EmailMessage
     msg = EmailMessage() 
     mtxt=''  #initialing null
-    if type=='NEW':
+    if type=='NEW' or type=='BRIGHT NEW':
         _message=''
         if message != 'None':
             _message = '\n'+message
@@ -20,7 +20,10 @@ def _send_email_notice(type='NEW',name='None',sendto='JFS',RA='None',DEC='None',
     if sendto=='JFS':
         toaddr   = 'jsteiner@cfa.harvard.edu'
     else:
-        toaddr   = 'acisdude@cfa.harvard.edu'
+        if sendto == 'acisdude': 
+            toaddr   = 'acisdude@cfa.harvard.edu'
+        else:
+            toaddr  = sendto
     #msg['Subject'] = f('X-ray SourceList Alert: '+type+' '+mtxt)
     msg['Subject'] = ('[X-ray Source Alert] '+type+' '+mtxt)
     msg['From'] = fromaddr
@@ -35,7 +38,7 @@ def _send_email_notice(type='NEW',name='None',sendto='JFS',RA='None',DEC='None',
         
 # Converts binary string to text string
 def bintostr(inlist):
-    return([str(b).replace("b",'').replace("'",'') for b in inlist])
+    return([str(b).replace("b'","'").replace("'",'') for b in inlist])
     
 
 # The major routine that updates the master sourcelist, to be run after updating MAXI and BAT daily lists
@@ -164,7 +167,7 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
     blankentry['Category']        = -99
     blankentry['Activity']        = -99
     blankentry['SigCount']        = -99
-
+    blankentry['AltNames']        =  0
 
     #for each HI source,
     #   (1) Screen against excludelist
@@ -212,9 +215,9 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                 if pageworks != 1: 
                     if obj[0:2]=='A_':
                         obj='1'+obj
-                        if obj[0:2]=='X_':
-                            obj=('foo'+obj).replace('fooX_','3A_')                       
-                            pageworks = mr.test_simbad_page(obj,mirror=mirror)
+                    if obj[0:2]=='X_':
+                        obj=('foo'+obj).replace('fooX_','3A_')                       
+                    pageworks = mr.test_simbad_page(obj,mirror=mirror)
 
             if obj == '404_Not_Found':  
                 obj='Unknown'
@@ -298,7 +301,7 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                     anames = xx
                                     addaltname = True    # update the altnames to include this maxiID
                                 else:
-                                    if (xx in names) == False:
+                                    if (xx in names) == False and xx != '' and xx != ',':
                                         anames = np.str(names).replace("['","").replace("']","").replace(" ",",").replace("'","")+','+xx
                                         addaltname = True   # update altnames to include this maxiID
                     incr+=1
@@ -318,12 +321,14 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                             noms = np.str(mtab[i]['AltNames']).split(',')
                             names = [_.strip() for _ in noms]
                             for nn in names:
-                                if nn[0]=='J':  # likely a MAXI-ID
-                                    if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                        activity=1
-                                if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                    activity=1                                    
+                                if len(nn) > 0:
+                                    if nn[0]=='J':  # likely a MAXI-ID
+                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                            activity=1
+                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                        activity=1                                    
                     mtab[i]['Activity']=activity
+
                     
                 if mxf > mtab[i]['Fpeak(Crab)']:   # if new peak identified, update peak parameters  
                     mtab[i]['Fpeak(Crab)']=mxf
@@ -331,12 +336,19 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                     mtab[i]['RecordInst']='MAXI'
                     mtab[i]['Category']=category
                 if addaltname == True:
-                    mtab[i]['AltNames']=anames
+                    mtab[i]['AltNames']=anames.replace(",,",",")
                 updated[i] = 1  # all set
             else:
                 # MAKE A NEW ENTRY!
                 print('MAKING A NEW ENTRY: name='+obj+' RA = '+np.str(ra)+' & DEC = '+np.str(dec))
-                _send_email_notice(type='NEW',name=obj,sendto='JFS',RA=ra,DEC=dec,home=home,message='MAXI detection, peak flux='+np.str(mxf)+' at '+np.str(mxmjd))
+                _pref_= 'BRIGHT '
+                _mxf_ = np.float(mxf)
+                _fun_ = 'Crab'
+                if mxf < 1:
+                    _pref_ =''
+                    _mxf_ = np.round(np.float(mxf)*1000)
+                    _fun_ = 'mCrab'
+                _send_email_notice(type=_pref_+'NEW',name=obj,sendto='JFS',RA=ra,DEC=dec,home=home,message='MAXI detection, peak flux='+np.str(_mxf_)+' '+_fun_+' at '+np.str(mxmjd))
 
                 newentry = copy.deepcopy(blankentry)
                                   
@@ -443,7 +455,7 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                     anames = xx
                                     addaltname = True    
                                 else:
-                                    if (xx in names) == False:
+                                    if (xx in names) == False and xx != '' and xx != ',':
                                         anames = np.str(names).replace("['","").replace("']","").replace(" ",",").replace("'","")+','+xx
                                         addaltname = True
 
@@ -466,11 +478,12 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                             noms = np.str(mtab[i]['AltNames']).split(',')
                             names = [_.strip() for _ in noms]
                             for nn in names:
-                                if nn[0]=='J':  # likely a MAXI-ID
-                                    if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                        activity=1
-                                if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                    activity=1                                    
+                                if len(nn) > 0:
+                                    if nn[0]=='J':  # likely a MAXI-ID
+                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                            activity=1
+                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                        activity=1                                    
                     mtab[i]['Activity']=activity
                     
 
@@ -481,13 +494,19 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                     mtab[i]['Category']=category
 
                 if addaltname == True:
-                    mtab[i]['AltNames']=anames
+                    mtab[i]['AltNames']=anames.replace(",,",",")
 
                 updated[i] = 1  # all set
             else:
                 # MAKE A NEW ENTRY!
-
-                _send_email_notice(type='NEW',name=obj,sendto='JFS',RA=ra,DEC=dec,home=home,message='BAT detection, peak flux='+np.str(mxf)+' at '+np.str(mxmjd))
+                _pref_= 'BRIGHT '
+                _mxf_ = np.float(mxf)
+                _fun_ = 'Crab'
+                if mxf < 1:
+                    _pref_=''
+                    _mxf_ = np.round(np.float(mxf)*1000)
+                    _fun_ = 'mCrab'
+                _send_email_notice(type=_pref_+'NEW',name=obj,sendto='JFS',RA=ra,DEC=dec,home=home,message='BAT detection, peak flux='+np.str(_mxf_)+' '+_fun_+' at '+np.str(mxmjd))
 
                 newentry = copy.deepcopy(blankentry)
                                   
@@ -554,9 +573,9 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                 if pageworks != 1:
                     if obj[0:2]=='A_':
                         obj='1'+obj
-                        if obj[0:2]=='X_':
-                            obj=('foo'+obj).replace('fooX_','3A_')                       
-                            pageworks = mr.test_simbad_page(obj,mirror=mirror)
+                    if obj[0:2]=='X_':
+                        obj=('foo'+obj).replace('fooX_','3A_')                       
+                    pageworks = mr.test_simbad_page(obj,mirror=mirror)
 
             if obj == '404_Not_Found':
                 obj='Unknown'
@@ -621,7 +640,7 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                     anames = xx
                                     addaltname = True    
                                 else:
-                                    if (xx in names) == False:
+                                    if (xx in names) == False and xx != '' and xx != ',':
                                         anames = np.str(names).replace("['","").replace("']","").replace(" ",",").replace("'","")+','+xx
                                         addaltname = True
 
@@ -645,15 +664,16 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                 noms = np.str(mtab[i]['AltNames']).split(',')
                                 names = [_.strip() for _ in noms]
                                 for nn in names:
-                                    if nn[0]=='J':  # likely a MAXI-ID
-                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                            activity=1
-                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                        activity=1                                    
+                                    if len(nn) > 0:
+                                        if nn[0]=='J':  # likely a MAXI-ID
+                                            if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                                activity=1
+                                        if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                            activity=1                                    
                         mtab[i]['Activity']=activity  ## *Only updates value if current setting (mtab[i]['Activity'])==1
                     
                 if addaltname == True:
-                    mtab[i]['AltNames']=anames 
+                    mtab[i]['AltNames']=anames.replace(",,",",") 
                 updated[i] = 1  # all set    
 
 
@@ -714,7 +734,7 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                     anames = xx
                                     addaltname = True    
                                 else:
-                                    if (xx in names) == False:
+                                    if (xx in names) == False and xx != '' and xx != ',':
                                         anames = np.str(names).replace("['","").replace("']","").replace(" ",",").replace("'","")+','+xx
                                         addaltname = True
 
@@ -739,15 +759,16 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                 noms = np.str(mtab[i]['AltNames']).split(',')
                                 names = [_.strip() for _ in noms]
                                 for nn in names:
-                                    if nn[0]=='J':  # likely a MAXI-ID
-                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                            activity=1
-                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                        activity=1                                    
+                                    if len(nn) > 0:
+                                        if nn[0]=='J':  # likely a MAXI-ID
+                                            if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                                activity=1
+                                        if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                            activity=1                                    
                         mtab[i]['Activity']=activity  ## *Only updates value if current setting (mtab[i]['Activity'])==1
                      
                 if addaltname == True:
-                    mtab[i]['AltNames']=anames
+                    mtab[i]['AltNames']=anames.replace(",,",",")
  
                 updated[i] = 1  # all set
 
@@ -803,13 +824,15 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                 noms = np.str(mtab[i]['AltNames']).split(',')
                                 names = [_.strip() for _ in noms]
                                 for nn in names:
-                                    if nn[0]=='J':  # likely a MAXI-ID
-                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                            activity=1
-                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                        activity=1                                    
+                                    if len(nn) > 0:
+                                        if nn[0]=='J':  # likely a MAXI-ID
+                                            if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                                activity=1
+                                        if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                            activity=1                                    
                             mtab[i]['Activity']=activity   # Only updates for case of initial Activity==1
                         
+
             else:  # no straightforward match... start a methodical hunt
                 for ii in np.arange(len(uniq_maxifaint)):
                     k = str(uniq_maxifaint[ii]).replace("b'","").replace("'","")
@@ -861,13 +884,13 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
 
                             noms = np.str(mtab[i]['AltNames']).split(',')
                             names = [_.strip() for _ in noms]
-                            if (k not in names):
+                            if (k not in names) and k != '' and k != ',':
                                 addaltname=True
                                 anames = mtab[i]['AltNames']+','+k
                                 if names[0] == 'none' or names[0]=='--' or names[0]=='0':
                                     anames=k
                             if addaltname == True:
-                                mtab[i]['AltNames']=anames
+                                mtab[i]['AltNames']=anames.replace(",,",",")
 
                             
                             activity=0 # the default for this case
@@ -878,12 +901,14 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                 else:
                                     # doublecheck no flickering under a different name
                                     for nn in names:
-                                        if nn[0]=='J':  # likely a MAXI-ID
-                                            if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                                activity=1
-                                        if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                            activity=1                                    
+                                        if len(nn) > 0:
+                                            if nn[0]=='J':  # likely a MAXI-ID
+                                                if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                                    activity=1
+                                            if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                                activity=1                                    
                                 mtab[i]['Activity']=activity   #Only updates for case of initial Activity==1
+
 
 
             if  _src != 'Unknown':
@@ -907,11 +932,12 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                             noms = np.str(mtab[i]['AltNames']).split(',')
                             names = [_.strip() for _ in noms]
                             for nn in names:
-                                if nn[0]=='J':  # likely a MAXI-ID
-                                    if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                        activity=1
-                                if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
-                                    activity=1                                    
+                                if len(nn) > 0:
+                                    if nn[0]=='J':  # likely a MAXI-ID
+                                        if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                            activity=1
+                                    if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
+                                        activity=1                                    
                         mtab[i]['Activity']=activity   #Only updates for case of initial Activity==1
                         
             else:  # no straightforward match... start a methodical hunt                
@@ -934,13 +960,13 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
 
                                 noms = np.str(mtab[i]['AltNames']).split(',')
                                 names = [_.strip() for _ in noms]
-                                if (k not in names):
+                                if (k not in names) and k != '' and k != ',':
                                     addaltname=True
                                     anames = mtab[i]['AltNames']+','+k
                                     if names[0] == 'none' or names[0]=='--' or names[0]=='0':
                                         anames=k
                                 if addaltname == True:
-                                    mtab[i]['AltNames']=anames
+                                    mtab[i]['AltNames']=anames.replace(",,",",")
                                             
                                 activity=0 # the default for this case
                                 if (mtab[i]['MJDrecent[MAXI]'] < drecent):   #Only if most recent data does this offer a chance to turn it off
@@ -950,9 +976,10 @@ def update_master_record(masterfile='master_sourcelist.tab',remapfile='override.
                                                 activity=1                                        
                                         # doublecheck no flickering under a different name
                                         for nn in names:
-                                            if nn[0]=='J':  # likely a MAXI-ID
-                                                if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
-                                                    activity=1
+                                            if len(nn) > 0:
+                                                if nn[0]=='J':  # likely a MAXI-ID
+                                                    if nn in bintostr(uniq_mflicker):   # check if matches a flickering ID
+                                                        activity=1
                                                 if nn.lower() in [q.lower() for q in bintostr(uniq_sflicker)]:   # check if matches a flickering ID
                                                     activity=1                                    
                                         mtab[i]['Activity']=activity   #Only updates for case of initial Activity==1
